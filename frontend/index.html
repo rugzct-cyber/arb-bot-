@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HFT Arb Bot - Professional Dashboard</title>
+    <meta name="description" content="High-Frequency Trading Arbitrage Bot Dashboard with real-time orderbook analysis">
+    <link rel="stylesheet" href="/static/style.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap"
+        rel="stylesheet">
+</head>
+
+<body>
+    <div class="app">
+        <!-- Header -->
+        <header class="header">
+            <div class="header-left">
+                <h1 class="logo">⚡ HFT Arb Bot</h1>
+                <span class="version">v2.0</span>
+            </div>
+            <div class="header-center">
+                <div class="status-indicator" id="ws-status">
+                    <span class="status-dot disconnected"></span>
+                    <span class="status-text">Connecting...</span>
+                </div>
+            </div>
+            <div class="header-right">
+                <div class="metric-pill">
+                    <span class="metric-label">Bots</span>
+                    <span class="metric-value" id="bot-count">0</span>
+                </div>
+                <div class="metric-pill">
+                    <span class="metric-label">Avg Latency</span>
+                    <span class="metric-value" id="avg-latency">--</span>
+                </div>
+            </div>
+        </header>
+
+        <!-- Main Content -->
+        <main class="main">
+            <!-- Left Panel: Bot Controls -->
+            <aside class="panel panel-left">
+                <div class="panel-header">
+                    <h2>➕ New Bot</h2>
+                </div>
+                <form id="add-bot-form" class="add-bot-form">
+                    <div class="form-group">
+                        <label>Symbol</label>
+                        <select id="symbol" class="select">
+                            <option value="ETH-USD">ETH-USD</option>
+                            <option value="BTC-USD">BTC-USD</option>
+                            <option value="SOL-USD">SOL-USD</option>
+                            <option value="DOGE-USD">DOGE-USD</option>
+                            <option value="XRP-USD">XRP-USD</option>
+                            <option value="LINK-USD">LINK-USD</option>
+                        </select>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>Exchange A</label>
+                            <select id="exchange-a" class="select">
+                                <option value="lighter">Lighter</option>
+                                <option value="extended">Extended</option>
+                                <option value="paradex">Paradex</option>
+                                <option value="vest">Vest</option>
+                            </select>
+                        </div>
+                        <span class="exchange-arrow">↔</span>
+                        <div class="form-group">
+                            <label>Exchange B</label>
+                            <select id="exchange-b" class="select">
+                                <option value="vest">Vest</option>
+                                <option value="paradex">Paradex</option>
+                                <option value="extended">Extended</option>
+                                <option value="lighter">Lighter</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>Min Spread %</label>
+                            <input type="number" id="min-spread" value="0.15" step="0.01" min="0" class="input">
+                        </div>
+                        <div class="form-group">
+                            <label>Max Size</label>
+                            <input type="number" id="max-size" value="5" step="0.1" min="0.1" class="input">
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <label class="checkbox-label">
+                            <input type="checkbox" id="use-websocket">
+                            <span class="checkbox-custom"></span>
+                            WebSocket Mode
+                        </label>
+                        <label class="checkbox-label">
+                            <input type="checkbox" id="dry-run" checked>
+                            <span class="checkbox-custom"></span>
+                            Dry Run
+                        </label>
+                    </div>
+                    <button type="submit" class="btn btn-primary btn-full">
+                        <span class="btn-icon">🚀</span> Launch Bot
+                    </button>
+                </form>
+
+                <!-- Exchange Latencies -->
+                <div class="panel-section">
+                    <h3>📡 Exchange Latencies</h3>
+                    <div id="latency-cards" class="latency-cards">
+                        <div class="latency-card">
+                            <span class="exchange-name">Lighter</span>
+                            <span class="latency-value" id="latency-lighter">--</span>
+                        </div>
+                        <div class="latency-card">
+                            <span class="exchange-name">Extended</span>
+                            <span class="latency-value" id="latency-extended">--</span>
+                        </div>
+                        <div class="latency-card">
+                            <span class="exchange-name">Paradex</span>
+                            <span class="latency-value" id="latency-paradex">--</span>
+                        </div>
+                        <div class="latency-card">
+                            <span class="exchange-name">Vest</span>
+                            <span class="latency-value" id="latency-vest">--</span>
+                        </div>
+                    </div>
+                </div>
+            </aside>
+
+            <!-- Center: Active Bots -->
+            <section class="panel panel-center">
+                <div class="panel-header">
+                    <h2>🤖 Active Bots</h2>
+                    <div class="filter-pills">
+                        <button class="pill active" data-filter="all">All</button>
+                        <button class="pill" data-filter="running">Running</button>
+                        <button class="pill" data-filter="stopped">Stopped</button>
+                    </div>
+                </div>
+                <div id="bots-container" class="bots-container">
+                    <div id="no-bots" class="empty-state">
+                        <div class="empty-icon">📊</div>
+                        <p>No bots running</p>
+                        <p class="empty-hint">Create a bot to start arbitrage scanning</p>
+                    </div>
+                    <div id="bots-list" class="bots-list"></div>
+                </div>
+            </section>
+
+            <!-- Right Panel: Selected Bot Details -->
+            <aside class="panel panel-right" id="details-panel">
+                <div class="panel-header">
+                    <h2>📈 Bot Details</h2>
+                    <button class="btn-icon-only" id="close-details">✕</button>
+                </div>
+                <div id="bot-details" class="bot-details">
+                    <div class="empty-state">
+                        <p>Select a bot to view details</p>
+                    </div>
+                </div>
+            </aside>
+        </main>
+    </div>
+
+    <script src="/static/app.js"></script>
+</body>
+
+</html>

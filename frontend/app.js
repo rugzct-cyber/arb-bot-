@@ -537,8 +537,6 @@ async function addBot(e) {
 
         if (!result.success) {
             showNotification('Error: ' + result.error, 'error');
-        } else {
-            showNotification(`Bot ${result.bot_id} created!`, 'success');
         }
     } catch (err) {
         showNotification('Error: ' + err.message, 'error');
@@ -562,8 +560,6 @@ async function startBot(botId) {
 }
 
 async function removeBot(botId) {
-    if (!confirm('Remove this bot?')) return;
-
     try {
         await fetch(`/api/bots/${botId}`, { method: 'DELETE' });
         if (selectedBotId === botId) {

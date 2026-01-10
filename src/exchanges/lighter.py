@@ -26,12 +26,12 @@ class LighterAdapter(ExchangeAdapter):
     # Reverse mapping for WebSocket
     ID_TO_SYMBOL = {v: k for k, v in MARKET_IDS.items()}
 
-    def __init__(self, api_key: str = "", private_key: str = "", key_index: int = 0, wallet_address: str = ""):
+    def __init__(self, api_key: str = "", private_key: str = "", key_index: int = 0, account_index: int = 0):
         super().__init__()
         self.api_key = api_key
         self.private_key = private_key
-        self.key_index = key_index
-        self.wallet_address = wallet_address
+        self.key_index = key_index  # API key index (0-254)
+        self.account_index = account_index  # Lighter account index
         self._session: Optional[aiohttp.ClientSession] = None
         self._ws: Optional[aiohttp.ClientWebSocketResponse] = None
         self._ws_task: Optional[asyncio.Task] = None
@@ -49,14 +49,16 @@ class LighterAdapter(ExchangeAdapter):
             if self.api_key and self.private_key:
                 try:
                     from lighter.signer_client import SignerClient
-                    from lighter.constants import MAINNET_API
+                    
+                    # Mainnet API URL
+                    MAINNET_URL = "https://mainnet.zklighter.elliot.ai"
                     
                     self._signer = SignerClient(
-                        base_url=MAINNET_API,
+                        url=MAINNET_URL,
+                        account_index=self.account_index,
                         api_private_keys={self.key_index: self.private_key},
-                        account_index=self.key_index,
                     )
-                    print(f"✅ [lighter] Signer initialized (key index {self.key_index})")
+                    print(f"✅ [lighter] Signer initialized (account {self.account_index}, key index {self.key_index})")
                 except ImportError as e:
                     print(f"⚠️ [lighter] SDK not available: {e}")
                 except Exception as e:
@@ -72,6 +74,7 @@ class LighterAdapter(ExchangeAdapter):
         except Exception as e:
             print(f"❌ [lighter] Init error: {e}")
             return False
+
 
     async def get_orderbook(self, symbol: str, depth: int = 10) -> Optional[Orderbook]:
         """Fetch orderbook with full depth from Lighter"""
@@ -239,11 +242,11 @@ class LighterAdapter(ExchangeAdapter):
 
     async def get_balance(self) -> Optional[Balance]:
         """Fetch balance from Lighter"""
-        if not self._session or not self.api_key:
+        if not self._session or not self.account_index:
             return None
 
         try:
-            url = f"{self.BASE_URL}/account?by=api_key&value={self.api_key}"
+            url = f"{self.BASE_URL}/account?by=index&value={self.account_index}"
             async with self._session.get(url) as resp:
                 if resp.status != 200:
                     return None
@@ -275,21 +278,40 @@ class LighterAdapter(ExchangeAdapter):
             return None
         
         try:
-            market_id = self.MARKET_IDS.get(symbol, 0)
-            is_buy = side.lower() == "buy"
+            from lighter.signer_client import SignerClient
             
-            result = self._signer.create_order(
+            market_id = self.MARKET_IDS.get(symbol, 0)
+            is_ask = side.lower() == "sell"  # is_ask=True for sell orders
+            
+            # Generate unique client order index
+            client_order_index = int(time.time() * 1000) % 2147483647
+            
+            # Convert to SDK integer format:
+            # - base_amount: 9 decimals (e.g., 0.001 ETH = 1000000)
+            # - price: 6 decimals (e.g., $3000 = 3000000000)
+            base_amount_int = int(size * 10**9)
+            price_int = int(price * 10**6)
+            
+            result = await self._signer.create_order(
                 market_index=market_id,
-                price=str(price),
-                amount=str(size),
-                is_bid=is_buy,
-                order_type="limit",
+                client_order_index=client_order_index,
+                base_amount=base_amount_int,
+                price=price_int,
+                is_ask=is_ask,
+                order_type=SignerClient.ORDER_TYPE_LIMIT,
+                time_in_force=SignerClient.ORDER_TIME_IN_FORCE_GOOD_TILL_TIME,
             )
             
             print(f"✅ [lighter] Order placed: {result}")
             
+            # Extract order ID from result
+            order_id = f"lighter_{client_order_index}"
+            if result and len(result) > 0:
+                if hasattr(result[0], 'order_status'):
+                    order_id = str(result[0].order_status.order_id) if result[0].order_status else order_id
+            
             return Order(
-                id=str(result.get("order_id", f"lighter_{int(time.time()*1000)}")),
+                id=order_id,
                 exchange=self.name,
                 symbol=symbol,
                 side=side,
@@ -300,6 +322,8 @@ class LighterAdapter(ExchangeAdapter):
             )
         except Exception as e:
             print(f"❌ [lighter] Order error: {e}")
+            import traceback
+            traceback.print_exc()
             return None
 
     async def cancel_order(self, order_id: str) -> bool:
@@ -308,7 +332,7 @@ class LighterAdapter(ExchangeAdapter):
             return False
             
         try:
-            result = self._signer.create_cancel_order(order_id=order_id)
+            result = await self._signer.create_cancel_order(order_id=order_id)
             print(f"✅ [lighter] Order cancelled: {result}")
             return True
         except Exception as e:

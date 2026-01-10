@@ -42,18 +42,18 @@ class ExtendedAdapter(ExchangeAdapter):
                 try:
                     from x10.perpetual.accounts import StarkPerpetualAccount
                     from x10.perpetual.trading_client import PerpetualTradingClient
-                    from x10.perpetual.configuration import MAINNET
+                    from x10.perpetual.configuration import MAINNET_CONFIG
                     
                     account = StarkPerpetualAccount(
                         api_key=self.api_key,
                         public_key=self.public_key,
                         private_key=self.stark_key,
-                        vault_id=0,
+                        vault=0,
                     )
                     
                     self._trading_client = PerpetualTradingClient(
-                        config=MAINNET,
-                        account=account,
+                        endpoint_config=MAINNET_CONFIG,
+                        stark_account=account,
                     )
                     print(f"✅ [extended] Trading client initialized")
                 except ImportError as e:
@@ -334,12 +334,13 @@ class ExtendedAdapter(ExchangeAdapter):
             
             order_side = OrderSide.BUY if side.lower() == "buy" else OrderSide.SELL
             
+            from decimal import Decimal
+            
             result = await self._trading_client.place_order(
-                market=symbol.replace("-", "_"),
+                market_name=symbol,
                 side=order_side,
-                order_type=OrderType.LIMIT,
-                price=str(price),
-                size=str(size),
+                price=Decimal(str(price)),
+                amount_of_synthetic=Decimal(str(size)),
             )
             
             print(f"✅ [extended] Order placed: {result}")

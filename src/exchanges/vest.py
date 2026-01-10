@@ -6,7 +6,6 @@ Docs: https://docs.vestmarkets.com/vest-api
 """
 import asyncio
 import time
-import json
 from typing import Optional, List, Callable
 import aiohttp
 

@@ -249,6 +249,10 @@ class SingleBot:
 
             # Analyze opportunity
             self._analyze_opportunity()
+            
+            # Always trigger UI update after successful poll
+            if self._update_callback:
+                self._update_callback(self.to_dict())
 
         except Exception as e:
             self.stats.errors += 1
@@ -352,7 +356,7 @@ class BotManager:
                 api_key=config.lighter.api_key,
                 private_key=config.lighter.private_key,
                 key_index=config.lighter.key_index,
-                wallet_address=config.lighter.wallet_address,
+                account_index=config.lighter.account_index,
             )
         elif exchange_name == "extended":
             adapter = ExtendedAdapter(

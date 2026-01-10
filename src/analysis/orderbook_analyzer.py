@@ -66,25 +66,6 @@ class SpreadOpportunity:
         }
 
 
-@dataclass
-class MarketMicrostructure:
-    """Market microstructure metrics"""
-    bid_ask_spread_bps: float = 0.0
-    depth_ratio: float = 0.0  # bid_depth / ask_depth
-    top_of_book_size: float = 0.0  # Average size at BBO
-    price_impact_1pct: float = 0.0  # Size to move market 1%
-    order_flow_imbalance: float = 0.0
-    
-    def to_dict(self) -> dict:
-        return {
-            "spread_bps": round(self.bid_ask_spread_bps, 2),
-            "depth_ratio": round(self.depth_ratio, 4),
-            "top_of_book_size": round(self.top_of_book_size, 4),
-            "price_impact_1pct": round(self.price_impact_1pct, 4),
-            "imbalance": round(self.order_flow_imbalance, 4),
-        }
-
-
 class OrderbookAnalyzer:
     """Advanced orderbook analysis engine for HFT"""
     
@@ -281,38 +262,3 @@ class OrderbookAnalyzer:
             score += 0.05
         
         return min(score, 1.0)
-    
-    def get_microstructure(self, ob: Orderbook) -> MarketMicrostructure:
-        """Analyze market microstructure of an orderbook"""
-        if not ob.bids or not ob.asks:
-            return MarketMicrostructure()
-        
-        # Bid-ask spread
-        spread_bps = ob.spread_bps
-        
-        # Depth ratio
-        depth_ratio = ob.bid_depth / ob.ask_depth if ob.ask_depth > 0 else 0
-        
-        # Top of book size (average of best bid and ask sizes)
-        top_size = (ob.best_bid_size + ob.best_ask_size) / 2
-        
-        # Price impact: size needed to move price 1%
-        target_price = ob.mid_price * 1.01
-        cumulative_size = 0.0
-        for level in ob.asks:
-            if level.price >= target_price:
-                break
-            cumulative_size += level.size
-        price_impact_1pct = cumulative_size
-        
-        return MarketMicrostructure(
-            bid_ask_spread_bps=spread_bps,
-            depth_ratio=depth_ratio,
-            top_of_book_size=top_size,
-            price_impact_1pct=price_impact_1pct,
-            order_flow_imbalance=ob.imbalance,
-        )
-
-
-# Global analyzer instance
-analyzer = OrderbookAnalyzer()

@@ -3,9 +3,7 @@ Paradex Exchange Adapter
 Zero-fee perpetuals on Starknet
 API: https://api.prod.paradex.trade/v1
 """
-import asyncio
 import time
-import json
 from typing import Optional, List, Callable
 import aiohttp
 

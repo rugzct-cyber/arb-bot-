@@ -202,7 +202,7 @@ class SingleBot:
         opp = self.analyzer.find_best_opportunity(
             self.orderbooks.exchange_a,
             self.orderbooks.exchange_b,
-            self.config.max_position_size
+            self.config.target_amount
         )
         
         if opp:

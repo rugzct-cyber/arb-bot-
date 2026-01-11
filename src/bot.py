@@ -30,7 +30,6 @@ class BotConfig:
     min_validity_ms: int = 100          # Anti-fakeout duration (ms)
     # Modes
     poll_interval_ms: int = 50          # HFT: faster polling
-    use_websocket: bool = False         # REST by default
     dry_run: bool = True
     fee_bps: float = 5.0                # Trading fees in basis points
 
@@ -294,59 +293,9 @@ class SingleBot:
         except asyncio.CancelledError:
             pass
 
-    async def run_websocket(self):
-        """Main bot loop - WebSocket streaming mode"""
-        self.log(f"🔌 Starting WebSocket streaming mode")
-        self._ws_mode = True
-        
-        try:
-            # Set up callbacks
-            if self.exchange_a:
-                self.exchange_a.set_orderbook_callback(self._on_orderbook_update)
-            if self.exchange_b:
-                self.exchange_b.set_orderbook_callback(self._on_orderbook_update)
-            
-            # Connect WebSockets
-            ws_a = await self.exchange_a.connect_websocket(self.config.symbol) if self.exchange_a else False
-            ws_b = await self.exchange_b.connect_websocket(self.config.symbol) if self.exchange_b else False
-            
-            if not ws_a or not ws_b:
-                self.log(f"⚠️ WebSocket unavailable, falling back to REST")
-                self._ws_mode = False
-                await self.run_polling()
-                return
-            
-            # Keep running while WebSocket is connected
-            while self.running:
-                # Check connection health
-                if not self.exchange_a.is_websocket_connected or not self.exchange_b.is_websocket_connected:
-                    self.log(f"⚠️ WebSocket disconnected, reconnecting...")
-                    await asyncio.sleep(1)
-                    await self.exchange_a.connect_websocket(self.config.symbol)
-                    await self.exchange_b.connect_websocket(self.config.symbol)
-                
-                # Log status periodically
-                if self.stats.ws_updates % 100 == 0 and self.stats.ws_updates > 0:
-                    runtime = int(time.time() - self.stats.start_time)
-                    self.log(f"📊 [{runtime}s] {self.stats.ws_updates} updates, avg:{self.stats.avg_latency_ms:.1f}ms")
-                
-                await asyncio.sleep(0.1)  # Small sleep to prevent busy loop
-                
-        except asyncio.CancelledError:
-            pass
-        finally:
-            # Cleanup WebSocket connections
-            if self.exchange_a:
-                await self.exchange_a.disconnect_websocket()
-            if self.exchange_b:
-                await self.exchange_b.disconnect_websocket()
-
     async def run(self):
-        """Main entry point - chooses WebSocket or polling mode"""
-        if self.config.use_websocket:
-            await self.run_websocket()
-        else:
-            await self.run_polling()
+        """Main entry point - REST polling mode only"""
+        await self.run_polling()
 
 
 class BotManager:
@@ -412,7 +361,6 @@ class BotManager:
         refill_delay_ms: int = 500,
         min_validity_ms: int = 100,
         poll_interval: int = 50,
-        use_websocket: bool = True,
         dry_run: bool = True,
     ) -> dict:
         """Create and start a new HFT bot"""
@@ -435,7 +383,6 @@ class BotManager:
             refill_delay_ms=refill_delay_ms,
             min_validity_ms=min_validity_ms,
             poll_interval_ms=poll_interval,
-            use_websocket=use_websocket,
             dry_run=dry_run,
         )
 
@@ -454,8 +401,7 @@ class BotManager:
         bot.stats.start_time = int(time.time())
         self.bots[bot_id] = bot
         
-        mode = "WebSocket" if use_websocket else "REST"
-        bot.log(f"🚀 Started in {mode} mode!")
+        bot.log(f"🚀 Started in REST mode!")
         asyncio.create_task(bot.run())
 
         return {"success": True, "bot_id": bot_id}

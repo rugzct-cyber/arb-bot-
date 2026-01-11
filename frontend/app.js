@@ -675,7 +675,6 @@ async function addBot(e) {
         refill_delay_ms: parseInt(document.getElementById('refill-delay').value),
         min_validity_ms: parseInt(document.getElementById('min-validity').value),
         // Modes
-        use_websocket: document.getElementById('use-websocket').checked,
         dry_run: document.getElementById('dry-run').checked,
         poll_interval: 50,
     };

@@ -104,7 +104,6 @@ class CreateBotRequest(BaseModel):
     min_validity_ms: int = 100
     # Modes
     poll_interval: int = 50
-    use_websocket: bool = False
     dry_run: bool = True
 
 
@@ -208,7 +207,6 @@ async def create_bot(req: CreateBotRequest):
         refill_delay_ms=req.refill_delay_ms,
         min_validity_ms=req.min_validity_ms,
         poll_interval=req.poll_interval,
-        use_websocket=req.use_websocket,
         dry_run=req.dry_run,
     )
     

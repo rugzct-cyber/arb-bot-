@@ -32,6 +32,7 @@ class BotConfig:
     poll_interval_ms: int = 20          # HFT: faster polling
     dry_run: bool = True
     fee_bps: float = 5.0                # Trading fees in basis points
+    min_balance_ratio: float = 0.25     # Min 25% balance per exchange for Balance Guard
 
 
 @dataclass
@@ -104,6 +105,7 @@ class SingleBot:
         self.orderbooks = OrderbookState()
         self._logs: List[str] = []
         self._update_callback: Optional[Callable] = None
+        self._safety_mode = False  # Stop trading after panic event
         
         # Smart Execution Manager with entry config from bot params
         entry_config = EntryConfig(
@@ -210,18 +212,146 @@ class SingleBot:
             if self._update_callback:
                 self._update_callback(self.to_dict())
 
+    async def _check_balance_guard(self) -> bool:
+        """
+        Balance Guard: Check if balance ratio allows trading.
+        Returns False if any exchange has < min_balance_ratio of total capital.
+        """
+        try:
+            bal_a = await self.exchange_a.get_balance()
+            bal_b = await self.exchange_b.get_balance()
+            
+            if not bal_a or not bal_b:
+                self.log("⚠️ Cannot fetch balances - blocking trade")
+                return False
+            
+            total = bal_a.available + bal_b.available
+            if total <= 0:
+                self.log("⚠️ Zero total balance - blocking trade")
+                return False
+            
+            ratio_a = bal_a.available / total
+            ratio_b = bal_b.available / total
+            
+            min_ratio = self.config.min_balance_ratio
+            if ratio_a < min_ratio or ratio_b < min_ratio:
+                self.log(f"🛡️ Balance Guard BLOCKED: {self.config.exchange_a}={ratio_a:.1%}, {self.config.exchange_b}={ratio_b:.1%}")
+                return False
+            
+            return True
+        except Exception as e:
+            self.log(f"❌ Balance check error: {e}")
+            return False
+
     async def _execute_trade(self, opp: SpreadOpportunity):
-        """Execute arbitrage trade"""
-        self.log(f"⚡ EXECUTING: {opp.recommended_size:.4f} @ {opp.buy_exchange}→{opp.sell_exchange}")
+        """
+        Execute arbitrage trade with atomic execution & panic recovery.
+        - Sends both orders in parallel
+        - If one leg fails: triggers Panic Close to neutralize exposure
+        """
+        if self._safety_mode:
+            self.log("🚫 Safety mode active - trade blocked")
+            return
+        
+        # Balance Guard: Check treasury balance ratio before trading
+        if not await self._check_balance_guard():
+            return
+        
+        # Determine which exchange is buy/sell
+        if opp.buy_exchange == self.config.exchange_a:
+            buy_exchange = self.exchange_a
+            sell_exchange = self.exchange_b
+        else:
+            buy_exchange = self.exchange_b
+            sell_exchange = self.exchange_a
+        
+        size = opp.recommended_size
+        buy_price = opp.buy_price
+        sell_price = opp.sell_price
+        
+        self.log(f"⚡ ATOMIC EXEC: BUY {size:.4f} @ ${buy_price:.2f} on {opp.buy_exchange}")
+        self.log(f"⚡ ATOMIC EXEC: SELL {size:.4f} @ ${sell_price:.2f} on {opp.sell_exchange}")
         
         try:
-            # TODO: Implement actual order execution with the signer
-            # For now, mark as successful
-            self.stats.trades += 1
-            self.log(f"✅ Trade executed")
+            # Execute both legs in parallel (atomic attempt)
+            results = await asyncio.gather(
+                buy_exchange.place_order(self.config.symbol, "buy", size, buy_price),
+                sell_exchange.place_order(self.config.symbol, "sell", size, sell_price),
+                return_exceptions=True
+            )
+            
+            buy_result, sell_result = results
+            buy_ok = buy_result is not None and not isinstance(buy_result, Exception)
+            sell_ok = sell_result is not None and not isinstance(sell_result, Exception)
+            
+            if buy_ok and sell_ok:
+                # Both succeeded - perfect execution
+                self.stats.trades += 1
+                self.log(f"✅ Trade executed: BUY={buy_result.id}, SELL={sell_result.id}")
+            
+            elif not buy_ok and not sell_ok:
+                # Both failed - no exposure, just log error
+                self.stats.errors += 1
+                buy_err = buy_result if isinstance(buy_result, Exception) else "None returned"
+                sell_err = sell_result if isinstance(sell_result, Exception) else "None returned"
+                self.log(f"❌ Both orders failed - no exposure. BUY: {buy_err}, SELL: {sell_err}")
+            
+            else:
+                # PANIC: One leg succeeded, one failed - we have exposure!
+                await self._panic_close(opp, buy_ok, sell_ok, buy_result, sell_result,
+                                       buy_exchange, sell_exchange, size)
+        
         except Exception as e:
-            self.log(f"❌ Trade failed: {e}")
+            self.log(f"❌ Trade execution error: {e}")
             self.stats.errors += 1
+
+    async def _panic_close(self, opp, buy_ok: bool, sell_ok: bool, 
+                           buy_result, sell_result,
+                           buy_exchange, sell_exchange, size: float):
+        """
+        Emergency close when one leg fails.
+        Immediately closes the exposed position and enters safety mode.
+        """
+        self._safety_mode = True
+        self.stats.errors += 1
+        
+        if buy_ok:
+            # Buy succeeded, sell failed → We have LONG exposure → SELL to close
+            failed_err = sell_result if isinstance(sell_result, Exception) else "None returned"
+            self.log(f"🚨 PANIC: BUY succeeded but SELL failed! Error: {failed_err}")
+            self.log(f"🚨 Closing LONG exposure of {size:.4f} on {opp.buy_exchange}...")
+            
+            try:
+                # Place market sell order to close (price=0 indicates market order)
+                close_order = await buy_exchange.place_order(
+                    self.config.symbol, "sell", size, 0
+                )
+                if close_order:
+                    self.log(f"🔥 Panic close executed: {close_order.id}")
+                else:
+                    self.log(f"💀 CRITICAL: Panic close FAILED - MANUAL INTERVENTION REQUIRED!")
+            except Exception as e:
+                self.log(f"💀 CRITICAL: Panic close error: {e} - MANUAL INTERVENTION REQUIRED!")
+        
+        else:
+            # Sell succeeded, buy failed → We have SHORT exposure → BUY to close
+            failed_err = buy_result if isinstance(buy_result, Exception) else "None returned"
+            self.log(f"🚨 PANIC: SELL succeeded but BUY failed! Error: {failed_err}")
+            self.log(f"🚨 Closing SHORT exposure of {size:.4f} on {opp.sell_exchange}...")
+            
+            try:
+                # Place market buy order to close (price=0 indicates market order)
+                close_order = await sell_exchange.place_order(
+                    self.config.symbol, "buy", size, 0
+                )
+                if close_order:
+                    self.log(f"🔥 Panic close executed: {close_order.id}")
+                else:
+                    self.log(f"💀 CRITICAL: Panic close FAILED - MANUAL INTERVENTION REQUIRED!")
+            except Exception as e:
+                self.log(f"💀 CRITICAL: Panic close error: {e} - MANUAL INTERVENTION REQUIRED!")
+        
+        self.log(f"🛑 Bot entering SAFETY MODE - manual restart required to resume trading")
 
     async def poll(self):
         """Single poll iteration (REST mode)"""

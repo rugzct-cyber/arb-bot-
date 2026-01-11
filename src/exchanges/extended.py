@@ -235,12 +235,22 @@ class ExtendedAdapter(ExchangeAdapter):
             
             from decimal import Decimal
             
-            result = await self._trading_client.place_order(
-                market_name=symbol,
-                side=order_side,
-                price=Decimal(str(price)),
-                amount_of_synthetic=Decimal(str(size)),
-            )
+            # Market order support: if price=0, use market order type
+            if price <= 0:
+                print(f"📊 [extended] Market order: {side.upper()} {size}")
+                result = await self._trading_client.place_order(
+                    market_name=symbol,
+                    side=order_side,
+                    amount_of_synthetic=Decimal(str(size)),
+                    order_type=OrderType.MARKET,
+                )
+            else:
+                result = await self._trading_client.place_order(
+                    market_name=symbol,
+                    side=order_side,
+                    price=Decimal(str(price)),
+                    amount_of_synthetic=Decimal(str(size)),
+                )
             
             print(f"✅ [extended] Order placed: {result}")
             

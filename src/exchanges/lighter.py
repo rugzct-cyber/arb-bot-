@@ -195,7 +195,22 @@ class LighterAdapter(ExchangeAdapter):
             # - base_amount: 9 decimals (e.g., 0.001 ETH = 1000000)
             # - price: 6 decimals (e.g., $3000 = 3000000000)
             base_amount_int = int(size * 10**9)
-            price_int = int(price * 10**6)
+            
+            # Market order support: if price=0, use aggressive IOC order
+            if price <= 0:
+                # For market sell: use price 0 (will match any bid)
+                # For market buy: use very high price (will match any ask)
+                if is_ask:  # Selling
+                    price_int = 1  # Minimum price to sell at market
+                else:  # Buying
+                    price_int = int(999999 * 10**6)  # Very high price to buy at market
+                order_type = SignerClient.ORDER_TYPE_LIMIT
+                time_in_force = SignerClient.ORDER_TIME_IN_FORCE_IMMEDIATE_OR_CANCEL
+                print(f"📊 [lighter] Market order (IOC): {'SELL' if is_ask else 'BUY'} {size}")
+            else:
+                price_int = int(price * 10**6)
+                order_type = SignerClient.ORDER_TYPE_LIMIT
+                time_in_force = SignerClient.ORDER_TIME_IN_FORCE_GOOD_TILL_TIME
             
             result = await self._signer.create_order(
                 market_index=market_id,
@@ -203,8 +218,8 @@ class LighterAdapter(ExchangeAdapter):
                 base_amount=base_amount_int,
                 price=price_int,
                 is_ask=is_ask,
-                order_type=SignerClient.ORDER_TYPE_LIMIT,
-                time_in_force=SignerClient.ORDER_TIME_IN_FORCE_GOOD_TILL_TIME,
+                order_type=order_type,
+                time_in_force=time_in_force,
             )
             
             print(f"✅ [lighter] Order placed: {result}")

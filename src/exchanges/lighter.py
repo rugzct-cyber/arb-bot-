@@ -196,31 +196,43 @@ class LighterAdapter(ExchangeAdapter):
             # - price: 6 decimals (e.g., $3000 = 3000000000)
             base_amount_int = int(size * 10**9)
             
-            # Market order support: if price=0, use aggressive IOC order
+            # Market order: if price<=0, use create_market_order
             if price <= 0:
-                # For market sell: use price 0 (will match any bid)
-                # For market buy: use very high price (will match any ask)
-                if is_ask:  # Selling
-                    price_int = 1  # Minimum price to sell at market
-                else:  # Buying
-                    price_int = int(999999 * 10**6)  # Very high price to buy at market
-                order_type = SignerClient.ORDER_TYPE_LIMIT
-                time_in_force = SignerClient.ORDER_TIME_IN_FORCE_IMMEDIATE_OR_CANCEL
-                print(f"📊 [lighter] Market order (IOC): {'SELL' if is_ask else 'BUY'} {size}")
+                # For market orders, we need a worst acceptable price (slippage protection)
+                # Get current orderbook to determine reasonable price
+                orderbook = await self.get_orderbook(symbol, depth=1)
+                if orderbook:
+                    if is_ask:  # Selling - use best bid with 5% slippage
+                        worst_price = orderbook.bids[0].price * 0.95 if orderbook.bids else 1
+                    else:  # Buying - use best ask with 5% slippage
+                        worst_price = orderbook.asks[0].price * 1.05 if orderbook.asks else 999999
+                else:
+                    worst_price = 999999 if not is_ask else 1
+                
+                avg_execution_price_int = int(worst_price * 10**6)
+                
+                print(f"📊 [lighter] Market order: {'SELL' if is_ask else 'BUY'} {size} @ worst ${worst_price:.2f}")
+                
+                result = await self._signer.create_market_order(
+                    market_index=market_id,
+                    client_order_index=client_order_index,
+                    base_amount=base_amount_int,
+                    avg_execution_price=avg_execution_price_int,
+                    is_ask=is_ask,
+                )
             else:
+                # Limit order
                 price_int = int(price * 10**6)
-                order_type = SignerClient.ORDER_TYPE_LIMIT
-                time_in_force = SignerClient.ORDER_TIME_IN_FORCE_GOOD_TILL_TIME
-            
-            result = await self._signer.create_order(
-                market_index=market_id,
-                client_order_index=client_order_index,
-                base_amount=base_amount_int,
-                price=price_int,
-                is_ask=is_ask,
-                order_type=order_type,
-                time_in_force=time_in_force,
-            )
+                
+                result = await self._signer.create_order(
+                    market_index=market_id,
+                    client_order_index=client_order_index,
+                    base_amount=base_amount_int,
+                    price=price_int,
+                    is_ask=is_ask,
+                    order_type=SignerClient.ORDER_TYPE_LIMIT,
+                    time_in_force=SignerClient.ORDER_TIME_IN_FORCE_GOOD_TILL_TIME,
+                )
             
             print(f"✅ [lighter] Order placed: {result}")
             

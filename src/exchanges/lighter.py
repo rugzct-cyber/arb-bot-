@@ -43,7 +43,15 @@ class LighterAdapter(ExchangeAdapter):
     async def initialize(self) -> bool:
         """Initialize the session and signer"""
         try:
-            self._session = aiohttp.ClientSession()
+            # Connection pooling for HFT: keep-alive, limit connections per host
+            connector = aiohttp.TCPConnector(
+                limit=10,              # Max connections total
+                limit_per_host=5,      # Max per single host
+                keepalive_timeout=30,  # Keep connections alive for reuse
+                enable_cleanup_closed=True,
+                force_close=False,     # Reuse connections
+            )
+            self._session = aiohttp.ClientSession(connector=connector)
             
             # Initialize signer if we have credentials
             if self.api_key and self.private_key:

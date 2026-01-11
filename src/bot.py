@@ -146,7 +146,7 @@ class SingleBot:
             "symbol": self.config.symbol,
             "exchange_a": self.config.exchange_a,
             "exchange_b": self.config.exchange_b,
-            "min_spread": self.config.min_spread_percent,
+            "entry_start_pct": self.config.entry_start_pct,
             "running": self.running,
             "ws_mode": self._ws_mode,
             "stats": {
@@ -214,7 +214,7 @@ class SingleBot:
             self.stats.opportunities += 1
             
             # Check if profitable after slippage
-            if opp.net_spread_after_slippage >= self.config.min_spread_percent:
+            if opp.net_spread_after_slippage >= self.config.entry_start_pct:
                 self.stats.profitable_opportunities += 1
                 
                 direction = f"{opp.buy_exchange}→{opp.sell_exchange}"

@@ -29,10 +29,6 @@ class ParadexAdapter(ExchangeAdapter):
         self._session: Optional[aiohttp.ClientSession] = None
         self._markets_cache: dict = {}
         self.latency = LatencyStats()
-        self._orderbook_callback: Optional[Callable[[Orderbook], None]] = None
-        # WebSocket not implementing for now (REST sync preferred for arb)
-        self._ws = None
-        self._connected = False
 
     async def initialize(self) -> bool:
         """Initialize connection and fetch markets"""
@@ -143,18 +139,6 @@ class ParadexAdapter(ExchangeAdapter):
         """Cancel order - requires authentication"""
         # Not implemented
         return False
-
-    async def connect_websocket(self, symbol: str) -> bool:
-        """WebSocket not implemented - using REST for sync"""
-        return False
-
-    async def disconnect_websocket(self) -> None:
-        """Disconnect WebSocket if connected"""
-        pass
-
-    def set_orderbook_callback(self, callback: Callable[[Orderbook], None]) -> None:
-        """Set callback for orderbook updates"""
-        self._orderbook_callback = callback
 
     async def close(self) -> None:
         """Close connections"""

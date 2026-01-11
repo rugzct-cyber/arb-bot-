@@ -1,6 +1,6 @@
 """
-Lighter Exchange Adapter with Full Orderbook Depth & WebSocket Support
-HFT-ready with latency tracking and real-time streaming
+Lighter Exchange Adapter with REST API
+HFT-ready with latency tracking and connection pooling
 """
 import time
 import asyncio
@@ -15,7 +15,6 @@ class LighterAdapter(ExchangeAdapter):
 
     name = "lighter"
     BASE_URL = "https://mainnet.zklighter.elliot.ai/api/v1"
-    WS_URL = "wss://mainnet.zklighter.elliot.ai/stream"
     
     # Market ID mapping
     MARKET_IDS = {
@@ -23,7 +22,7 @@ class LighterAdapter(ExchangeAdapter):
         "DOGE-USD": 3, "XRP-USD": 7, "LINK-USD": 8,
     }
     
-    # Reverse mapping for WebSocket
+    # Reverse mapping for symbol lookup
     ID_TO_SYMBOL = {v: k for k, v in MARKET_IDS.items()}
 
     def __init__(self, api_key: str = "", private_key: str = "", key_index: int = 0, account_index: int = 0):
@@ -33,11 +32,8 @@ class LighterAdapter(ExchangeAdapter):
         self.key_index = key_index  # API key index (0-254)
         self.account_index = account_index  # Lighter account index
         self._session: Optional[aiohttp.ClientSession] = None
-        self._ws: Optional[aiohttp.ClientWebSocketResponse] = None
-        self._ws_task: Optional[asyncio.Task] = None
         self._signer = None
         self._initialized = False
-        self._subscribed_symbols: set = set()
         self._orderbooks: dict[str, Orderbook] = {}
 
     async def initialize(self) -> bool:
@@ -145,105 +141,6 @@ class LighterAdapter(ExchangeAdapter):
             print(f"❌ [lighter] Orderbook error: {e}")
             return None
 
-    async def connect_websocket(self, symbol: str) -> bool:
-        """Connect to Lighter WebSocket for real-time orderbook updates"""
-        if not self._session:
-            return False
-        
-        try:
-            if not self._ws or self._ws.closed:
-                self._ws = await self._session.ws_connect(self.WS_URL)
-                self._connected = True
-                print(f"✅ [lighter] WebSocket connected")
-                
-                # Start message handler
-                self._ws_task = asyncio.create_task(self._handle_ws_messages())
-            
-            # Subscribe to orderbook channel
-            market_id = self.MARKET_IDS.get(symbol, 0)
-            subscribe_msg = {
-                "type": "subscribe",
-                "channel": "orderbook",
-                "market_id": market_id,
-            }
-            await self._ws.send_json(subscribe_msg)
-            self._subscribed_symbols.add(symbol)
-            print(f"✅ [lighter] Subscribed to {symbol} orderbook")
-            
-            return True
-            
-        except Exception as e:
-            print(f"❌ [lighter] WebSocket error: {e}")
-            self._connected = False
-            return False
-
-    async def _handle_ws_messages(self):
-        """Handle incoming WebSocket messages"""
-        try:
-            async for msg in self._ws:
-                if msg.type == aiohttp.WSMsgType.TEXT:
-                    start_time = time.time()
-                    data = json.loads(msg.data)
-                    
-                    if data.get("type") == "orderbook_update":
-                        await self._process_orderbook_update(data, start_time)
-                        
-                elif msg.type == aiohttp.WSMsgType.ERROR:
-                    print(f"❌ [lighter] WS error: {self._ws.exception()}")
-                    break
-                    
-        except asyncio.CancelledError:
-            pass
-        except Exception as e:
-            print(f"❌ [lighter] WS handler error: {e}")
-        finally:
-            self._connected = False
-
-    async def _process_orderbook_update(self, data: dict, start_time: float):
-        """Process orderbook update from WebSocket"""
-        latency_ms = (time.time() - start_time) * 1000
-        self.latency.record(latency_ms)
-        
-        market_id = data.get("market_id", 0)
-        symbol = self.ID_TO_SYMBOL.get(market_id, "ETH-USD") 
-        
-        raw_bids = data.get("bids", [])
-        raw_asks = data.get("asks", [])
-        
-        bids = [PriceLevel(price=float(b[0]), size=float(b[1])) for b in raw_bids if float(b[0]) > 0]
-        asks = [PriceLevel(price=float(a[0]), size=float(a[1])) for a in raw_asks if float(a[0]) > 0]
-        
-        orderbook = Orderbook(
-            exchange=self.name,
-            symbol=symbol,
-            bids=bids,
-            asks=asks,
-            timestamp=int(time.time() * 1000),
-            latency_ms=latency_ms,
-        )
-        
-        self._orderbooks[symbol] = orderbook
-        
-        # Trigger callback if set
-        if self._orderbook_callback:
-            self._orderbook_callback(orderbook)
-
-    async def disconnect_websocket(self) -> None:
-        """Disconnect WebSocket"""
-        if self._ws_task:
-            self._ws_task.cancel()
-            try:
-                await self._ws_task
-            except asyncio.CancelledError:
-                pass
-        
-        if self._ws and not self._ws.closed:
-            await self._ws.close()
-        
-        self._connected = False
-        self._subscribed_symbols.clear()
-        print(f"✅ [lighter] WebSocket disconnected")
-
     def get_cached_orderbook(self, symbol: str) -> Optional[Orderbook]:
         """Get cached orderbook (for low-latency access)"""
         return self._orderbooks.get(symbol)
@@ -349,6 +246,5 @@ class LighterAdapter(ExchangeAdapter):
 
     async def close(self):
         """Close all connections"""
-        await self.disconnect_websocket()
         if self._session:
             await self._session.close()

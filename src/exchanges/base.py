@@ -245,8 +245,6 @@ class ExchangeAdapter(ABC):
     
     def __init__(self):
         self.latency = LatencyStats()
-        self._orderbook_callback: Optional[Callable[[Orderbook], None]] = None
-        self._connected = False
 
     @abstractmethod
     async def initialize(self) -> bool:
@@ -274,21 +272,3 @@ class ExchangeAdapter(ABC):
     async def cancel_order(self, order_id: str) -> bool:
         """Cancel an order"""
         pass
-    
-    # WebSocket methods for HFT - optional implementation
-    async def connect_websocket(self, symbol: str) -> bool:
-        """Connect to WebSocket for real-time updates"""
-        return False
-    
-    async def disconnect_websocket(self) -> None:
-        """Disconnect WebSocket"""
-        pass
-    
-    def set_orderbook_callback(self, callback: Callable[[Orderbook], None]) -> None:
-        """Set callback for orderbook updates"""
-        self._orderbook_callback = callback
-    
-    @property
-    def is_websocket_connected(self) -> bool:
-        """Check if WebSocket is connected"""
-        return self._connected

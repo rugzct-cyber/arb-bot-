@@ -33,8 +33,6 @@ class VestAdapter(ExchangeAdapter):
         self._session: Optional[aiohttp.ClientSession] = None
         self._markets_cache: dict = {}
         self.latency = LatencyStats()
-        self._orderbook_callback: Optional[Callable[[Orderbook], None]] = None
-        self._connected = False
 
     def _get_headers(self) -> dict:
         """Get required headers for Vest API"""
@@ -63,7 +61,6 @@ class VestAdapter(ExchangeAdapter):
                         self._markets_cache[symbol] = market
                     
                     print(f"✅ [vest] Connected (HFT mode, {len(self._markets_cache)} markets)")
-                    self._connected = True
                     return True
                 else:
                     print(f"❌ [vest] Exchange info failed: {resp.status}")
@@ -170,18 +167,6 @@ class VestAdapter(ExchangeAdapter):
     async def cancel_order(self, order_id: str, symbol: str) -> bool:
         """Cancel order - requires authentication"""
         return False
-
-    async def connect_websocket(self, symbol: str) -> bool:
-        """WebSocket not implemented - using REST for sync"""
-        return False
-
-    async def disconnect_websocket(self) -> None:
-        """Disconnect WebSocket if connected"""
-        pass
-
-    def set_orderbook_callback(self, callback: Callable[[Orderbook], None]) -> None:
-        """Set callback for orderbook updates"""
-        self._orderbook_callback = callback
 
     async def close(self) -> None:
         """Close connections"""

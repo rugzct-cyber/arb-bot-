@@ -38,7 +38,6 @@ class BotConfig:
 class HFTStats:
     """HFT-specific statistics"""
     polls: int = 0
-    ws_updates: int = 0
     opportunities: int = 0
     profitable_opportunities: int = 0
     trades: int = 0
@@ -104,7 +103,6 @@ class SingleBot:
         )
         self.orderbooks = OrderbookState()
         self._logs: List[str] = []
-        self._ws_mode = False
         self._update_callback: Optional[Callable] = None
         
         # Smart Execution Manager with entry config from bot params
@@ -147,10 +145,8 @@ class SingleBot:
             "exchange_b": self.config.exchange_b,
             "entry_start_pct": self.config.entry_start_pct,
             "running": self.running,
-            "ws_mode": self._ws_mode,
             "stats": {
                 "polls": self.stats.polls,
-                "ws_updates": self.stats.ws_updates,
                 "opportunities": self.stats.opportunities,
                 "profitable": self.stats.profitable_opportunities,
                 "trades": self.stats.trades,
@@ -176,22 +172,6 @@ class SingleBot:
             "exit_status": self.execution_manager.get_status() if self.execution_manager else None,
             "logs": self.get_logs(),
         }
-
-    def _on_orderbook_update(self, orderbook: Orderbook):
-        """Callback for WebSocket orderbook updates"""
-        self.stats.ws_updates += 1
-        
-        # Update cached orderbook
-        if orderbook.exchange == self.config.exchange_a:
-            self.orderbooks.exchange_a = orderbook
-        elif orderbook.exchange == self.config.exchange_b:
-            self.orderbooks.exchange_b = orderbook
-        
-        self.orderbooks.last_update = int(time.time() * 1000)
-        
-        # Analyze if we have both orderbooks
-        if self.orderbooks.exchange_a and self.orderbooks.exchange_b:
-            self._analyze_opportunity()
 
     def _analyze_opportunity(self):
         """Analyze current orderbooks for opportunity"""

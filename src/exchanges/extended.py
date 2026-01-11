@@ -1,6 +1,6 @@
 """
-Extended Exchange Adapter with Full Orderbook Depth & WebSocket Support
-HFT-ready with latency tracking and real-time streaming
+Extended Exchange Adapter with REST API
+HFT-ready with latency tracking and connection pooling
 """
 import time
 import asyncio
@@ -16,7 +16,6 @@ class ExtendedAdapter(ExchangeAdapter):
     name = "extended"
     MARKETS_URL = "https://api.starknet.extended.exchange/api/v1/info/markets"
     ORDERBOOK_URL = "https://api.starknet.extended.exchange/api/v1/orderbook"
-    WS_URL = "wss://api.starknet.extended.exchange/ws/v1"
 
     def __init__(self, api_key: str = "", public_key: str = "", stark_key: str = ""):
         super().__init__()
@@ -24,12 +23,9 @@ class ExtendedAdapter(ExchangeAdapter):
         self.public_key = public_key
         self.stark_key = stark_key
         self._session: Optional[aiohttp.ClientSession] = None
-        self._ws: Optional[aiohttp.ClientWebSocketResponse] = None
-        self._ws_task: Optional[asyncio.Task] = None
         self._trading_client = None
         self._initialized = False
         self._markets_cache: list = []
-        self._subscribed_symbols: set = set()
         self._orderbooks: dict[str, Orderbook] = {}
 
     async def initialize(self) -> bool:
@@ -193,111 +189,6 @@ class ExtendedAdapter(ExchangeAdapter):
         except Exception as e:
             return None
 
-    async def connect_websocket(self, symbol: str) -> bool:
-        """Connect to Extended WebSocket for real-time orderbook updates"""
-        if not self._session:
-            return False
-        
-        try:
-            if not self._ws or self._ws.closed:
-                self._ws = await self._session.ws_connect(self.WS_URL)
-                self._connected = True
-                print(f"✅ [extended] WebSocket connected")
-                
-                self._ws_task = asyncio.create_task(self._handle_ws_messages())
-            
-            # Subscribe to orderbook channel
-            market_name = self._get_market_name(symbol)
-            subscribe_msg = {
-                "type": "subscribe",
-                "channel": "orderbook",
-                "market": market_name,
-            }
-            await self._ws.send_json(subscribe_msg)
-            self._subscribed_symbols.add(symbol)
-            print(f"✅ [extended] Subscribed to {symbol} orderbook")
-            
-            return True
-            
-        except Exception as e:
-            print(f"❌ [extended] WebSocket error: {e}")
-            self._connected = False
-            return False
-
-    async def _handle_ws_messages(self):
-        """Handle incoming WebSocket messages"""
-        try:
-            async for msg in self._ws:
-                if msg.type == aiohttp.WSMsgType.TEXT:
-                    start_time = time.time()
-                    data = json.loads(msg.data)
-                    
-                    if data.get("channel") == "orderbook":
-                        await self._process_orderbook_update(data, start_time)
-                        
-                elif msg.type == aiohttp.WSMsgType.ERROR:
-                    print(f"❌ [extended] WS error: {self._ws.exception()}")
-                    break
-                    
-        except asyncio.CancelledError:
-            pass
-        except Exception as e:
-            print(f"❌ [extended] WS handler error: {e}")
-        finally:
-            self._connected = False
-
-    async def _process_orderbook_update(self, data: dict, start_time: float):
-        """Process orderbook update from WebSocket"""
-        latency_ms = (time.time() - start_time) * 1000
-        self.latency.record(latency_ms)
-        
-        market = data.get("market", "").replace("_", "-")
-        symbol = market if market else "ETH-USD"
-        
-        ob_data = data.get("data", {})
-        raw_bids = ob_data.get("bids", [])
-        raw_asks = ob_data.get("asks", [])
-        
-        bids = []
-        for b in raw_bids:
-            if isinstance(b, list) and len(b) >= 2:
-                bids.append(PriceLevel(price=float(b[0]), size=float(b[1])))
-        
-        asks = []
-        for a in raw_asks:
-            if isinstance(a, list) and len(a) >= 2:
-                asks.append(PriceLevel(price=float(a[0]), size=float(a[1])))
-        
-        orderbook = Orderbook(
-            exchange=self.name,
-            symbol=symbol,
-            bids=bids,
-            asks=asks,
-            timestamp=int(time.time() * 1000),
-            latency_ms=latency_ms,
-        )
-        
-        self._orderbooks[symbol] = orderbook
-        
-        if self._orderbook_callback:
-            self._orderbook_callback(orderbook)
-
-    async def disconnect_websocket(self) -> None:
-        """Disconnect WebSocket"""
-        if self._ws_task:
-            self._ws_task.cancel()
-            try:
-                await self._ws_task
-            except asyncio.CancelledError:
-                pass
-        
-        if self._ws and not self._ws.closed:
-            await self._ws.close()
-        
-        self._connected = False
-        self._subscribed_symbols.clear()
-        print(f"✅ [extended] WebSocket disconnected")
-
     def get_cached_orderbook(self, symbol: str) -> Optional[Orderbook]:
         """Get cached orderbook (for low-latency access)"""
         return self._orderbooks.get(symbol)
@@ -382,6 +273,5 @@ class ExtendedAdapter(ExchangeAdapter):
 
     async def close(self):
         """Close all connections"""
-        await self.disconnect_websocket()
         if self._session:
             await self._session.close()

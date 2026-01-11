@@ -262,3 +262,57 @@ class OrderbookAnalyzer:
             score += 0.05
         
         return min(score, 1.0)
+    
+    def calculate_max_safe_qty(
+        self,
+        orderbook: Orderbook,
+        side: str,  # 'buy' or 'sell'
+        max_slippage_bps: float = 5.0
+    ) -> float:
+        """
+        Calculate the maximum quantity that can be executed within acceptable slippage.
+        Uses binary search to find the largest size where slippage <= max_slippage_bps.
+        
+        Args:
+            orderbook: The orderbook to analyze
+            side: 'buy' (uses asks) or 'sell' (uses bids)
+            max_slippage_bps: Maximum acceptable slippage in basis points
+            
+        Returns:
+            Maximum safe quantity, or 0 if no liquidity
+        """
+        max_slippage_pct = max_slippage_bps / 100.0
+        
+        if side == 'buy':
+            if not orderbook.asks:
+                return 0.0
+            max_possible = orderbook.ask_depth
+            slippage_fn = orderbook.estimate_buy_slippage
+        else:  # sell
+            if not orderbook.bids:
+                return 0.0
+            max_possible = orderbook.bid_depth
+            slippage_fn = orderbook.estimate_sell_slippage
+        
+        if max_possible <= 0:
+            return 0.0
+        
+        # Binary search for max safe qty
+        low = 0.0
+        high = max_possible
+        result = 0.0
+        
+        for _ in range(15):  # 15 iterations for precision
+            mid = (low + high) / 2
+            if mid <= 0:
+                break
+            
+            slippage = slippage_fn(mid)
+            
+            if slippage <= max_slippage_pct:
+                result = mid
+                low = mid
+            else:
+                high = mid
+        
+        return result

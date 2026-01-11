@@ -366,6 +366,11 @@ function renderBotDetails(bot) {
             </div>
         </div>
         
+        <div class="detail-section exit-strategy-section">
+            <h4>⚙️ Exit Strategy Settings</h4>
+            ${renderExitStrategySettings(bot)}
+        </div>
+        
         <div class="detail-section">
             <h4>📝 Logs</h4>
             <div class="logs-container" id="detail-logs">
@@ -510,6 +515,147 @@ function updateMetrics() {
 }
 
 // ============================================
+// Exit Strategy Settings
+// ============================================
+
+function renderExitStrategySettings(bot) {
+    const config = bot.exit_status?.config || {
+        grid_start_spread: 0.2,
+        grid_end_spread: -1.0,
+        grid_levels_count: 5,
+        grid_distribution: 'equal',
+        twap_interval_sec: 60,
+        max_slippage_bps: 5
+    };
+
+    const exitState = bot.exit_status?.state || 'idle';
+    const progress = bot.exit_status?.progress_pct || 0;
+
+    return `
+        <div class="exit-config-container" data-bot-id="${bot.id}">
+            <!-- Exit Status -->
+            <div class="exit-status-bar">
+                <span class="exit-state ${exitState}">${exitState.toUpperCase()}</span>
+                ${exitState === 'executing' ? `
+                    <div class="exit-progress">
+                        <div class="exit-progress-bar" style="width: ${progress}%"></div>
+                        <span>${progress.toFixed(1)}%</span>
+                    </div>
+                ` : ''}
+            </div>
+            
+            <!-- Grid Configuration -->
+            <div class="config-group">
+                <div class="config-group-title">Grid Configuration</div>
+                <div class="config-row">
+                    <div class="config-field">
+                        <label>Start Spread (%)</label>
+                        <input type="number" step="0.1" id="exit-grid-start" 
+                               value="${config.grid_start_spread}" class="config-input">
+                    </div>
+                    <div class="config-field">
+                        <label>End Spread (%)</label>
+                        <input type="number" step="0.1" id="exit-grid-end" 
+                               value="${config.grid_end_spread}" class="config-input">
+                    </div>
+                </div>
+                <div class="config-row">
+                    <div class="config-field full-width">
+                        <label>Levels: <span id="grid-levels-value">${config.grid_levels_count}</span></label>
+                        <input type="range" min="2" max="20" step="1" id="exit-grid-levels" 
+                               value="${config.grid_levels_count}" class="config-slider"
+                               oninput="document.getElementById('grid-levels-value').textContent = this.value">
+                    </div>
+                </div>
+                <div class="config-row">
+                    <div class="config-field">
+                        <label>Distribution</label>
+                        <div class="radio-group">
+                            <label class="radio-label">
+                                <input type="radio" name="grid-dist" value="equal" 
+                                       ${config.grid_distribution === 'equal' ? 'checked' : ''}>
+                                Equal
+                            </label>
+                            <label class="radio-label">
+                                <input type="radio" name="grid-dist" value="exponential"
+                                       ${config.grid_distribution === 'exponential' ? 'checked' : ''}>
+                                Exponential
+                            </label>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- TWAP Configuration -->
+            <div class="config-group">
+                <div class="config-group-title">TWAP Settings</div>
+                <div class="config-row">
+                    <div class="config-field full-width">
+                        <label>Idle Timeout: <span id="twap-interval-value">${config.twap_interval_sec}</span>s</label>
+                        <input type="range" min="10" max="300" step="10" id="exit-twap-interval" 
+                               value="${config.twap_interval_sec}" class="config-slider"
+                               oninput="document.getElementById('twap-interval-value').textContent = this.value">
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Safety Settings -->
+            <div class="config-group">
+                <div class="config-group-title">Safety</div>
+                <div class="config-row">
+                    <div class="config-field full-width">
+                        <label>Max Slippage: <span id="slippage-value">${config.max_slippage_bps}</span> bps</label>
+                        <input type="range" min="1" max="50" step="1" id="exit-max-slippage" 
+                               value="${config.max_slippage_bps}" class="config-slider"
+                               oninput="document.getElementById('slippage-value').textContent = this.value">
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Apply Button -->
+            <button class="btn btn-primary btn-apply-exit" onclick="updateExitConfig('${bot.id}')">
+                💾 Apply Changes
+            </button>
+        </div>
+    `;
+}
+
+async function updateExitConfig(botId) {
+    const gridStart = parseFloat(document.getElementById('exit-grid-start')?.value);
+    const gridEnd = parseFloat(document.getElementById('exit-grid-end')?.value);
+    const gridLevels = parseInt(document.getElementById('exit-grid-levels')?.value);
+    const twapInterval = parseFloat(document.getElementById('exit-twap-interval')?.value);
+    const maxSlippage = parseFloat(document.getElementById('exit-max-slippage')?.value);
+    const gridDist = document.querySelector('input[name="grid-dist"]:checked')?.value || 'equal';
+
+    const config = {
+        grid_start_spread: gridStart,
+        grid_end_spread: gridEnd,
+        grid_levels_count: gridLevels,
+        grid_distribution: gridDist,
+        twap_interval_sec: twapInterval,
+        max_slippage_bps: maxSlippage
+    };
+
+    try {
+        const resp = await fetch(`/api/bots/${botId}/configure_exit`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(config)
+        });
+        const result = await resp.json();
+
+        if (result.success) {
+            showNotification('Exit config updated!', 'success');
+        } else {
+            showNotification('Error: ' + result.error, 'error');
+        }
+    } catch (err) {
+        showNotification('Error: ' + err.message, 'error');
+    }
+}
+
+// ============================================
 // Bot Actions
 // ============================================
 
@@ -520,8 +666,15 @@ async function addBot(e) {
         symbol: document.getElementById('symbol').value,
         exchange_a: document.getElementById('exchange-a').value,
         exchange_b: document.getElementById('exchange-b').value,
-        min_spread: parseFloat(document.getElementById('min-spread').value),
-        max_size: parseFloat(document.getElementById('max-size').value),
+        // Entry parameters
+        entry_start_pct: parseFloat(document.getElementById('entry-start').value),
+        entry_full_pct: parseFloat(document.getElementById('entry-full').value),
+        target_amount: parseFloat(document.getElementById('target-amount').value),
+        // Advanced parameters
+        max_slippage_pct: parseFloat(document.getElementById('max-slippage').value),
+        refill_delay_ms: parseInt(document.getElementById('refill-delay').value),
+        min_validity_ms: parseInt(document.getElementById('min-validity').value),
+        // Modes
         use_websocket: document.getElementById('use-websocket').checked,
         dry_run: document.getElementById('dry-run').checked,
         poll_interval: 50,
@@ -627,6 +780,16 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Form handler
     document.getElementById('add-bot-form').addEventListener('submit', addBot);
+
+    // Advanced toggle handler
+    const advancedToggle = document.getElementById('advanced-toggle');
+    const advancedSection = document.getElementById('advanced-section');
+    if (advancedToggle && advancedSection) {
+        advancedToggle.addEventListener('click', () => {
+            advancedToggle.classList.toggle('open');
+            advancedSection.classList.toggle('open');
+        });
+    }
 
     // Close details button
     document.getElementById('close-details')?.addEventListener('click', () => {

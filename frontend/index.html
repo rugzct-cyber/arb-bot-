@@ -6,7 +6,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>HFT Arb Bot - Professional Dashboard</title>
     <meta name="description" content="High-Frequency Trading Arbitrage Bot Dashboard with real-time orderbook analysis">
-    <link rel="stylesheet" href="/static/style.css">
+    <link rel="stylesheet" href="/static/style.css?v=4">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link
@@ -73,23 +73,61 @@
                         <div class="form-group">
                             <label>Exchange B</label>
                             <select id="exchange-b" class="select">
+                                <option value="extended">Extended</option>
                                 <option value="vest">Vest</option>
                                 <option value="paradex">Paradex</option>
-                                <option value="extended">Extended</option>
                                 <option value="lighter">Lighter</option>
                             </select>
                         </div>
                     </div>
+
+                    <!-- Targeting (Scale-in) -->
+                    <div class="form-section-title">📎 Targeting</div>
                     <div class="form-row">
                         <div class="form-group">
-                            <label>Min Spread %</label>
-                            <input type="number" id="min-spread" value="0.15" step="0.01" min="0" class="input">
+                            <label>Entry Start</label>
+                            <input type="number" id="entry-start" value="0.5" step="0.1" min="0" class="input"
+                                title="Start firing at this spread">
                         </div>
                         <div class="form-group">
-                            <label>Max Size</label>
-                            <input type="number" id="max-size" value="5" step="0.1" min="0.1" class="input">
+                            <label>Entry Full</label>
+                            <input type="number" id="entry-full" value="1.0" step="0.1" min="0" class="input"
+                                title="100% investment at this spread">
                         </div>
                     </div>
+
+                    <!-- Sizing -->
+                    <div class="form-group">
+                        <label>Token Amount</label>
+                        <input type="number" id="target-amount" value="15" step="0.1" min="0.1" class="input"
+                            title="Target in tokens (ETH, BTC, etc.)">
+                    </div>
+
+                    <!-- Advanced Toggle -->
+                    <div class="advanced-toggle" id="advanced-toggle">
+                        <span class="toggle-icon">▶</span> Advanced Settings
+                    </div>
+
+                    <div class="advanced-section" id="advanced-section">
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label>Slippage %</label>
+                                <input type="number" id="max-slippage" value="0.05" step="0.01" min="0.01" class="input"
+                                    title="Strict slippage limit">
+                            </div>
+                            <div class="form-group">
+                                <label>Refill (ms)</label>
+                                <input type="number" id="refill-delay" value="500" step="50" min="100" class="input"
+                                    title="Pause between slices">
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label>Min Validity (ms)</label>
+                            <input type="number" id="min-validity" value="100" step="10" min="0" class="input"
+                                title="Anti-fakeout duration">
+                        </div>
+                    </div>
+
                     <div class="form-row">
                         <label class="checkbox-label">
                             <input type="checkbox" id="use-websocket">
@@ -166,7 +204,7 @@
         </main>
     </div>
 
-    <script src="/static/app.js"></script>
+    <script src="/static/app.js?v=4"></script>
 </body>
 
 </html>

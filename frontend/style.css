@@ -263,19 +263,74 @@ body {
     flex-direction: column;
     gap: var(--spacing-xs);
     flex: 1;
+    min-width: 0;
 }
 
 .form-group label {
-    font-size: 0.75rem;
+    font-size: 0.65rem;
     color: var(--text-muted);
     text-transform: uppercase;
-    letter-spacing: 0.5px;
+    letter-spacing: 0.3px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 .form-row {
     display: flex;
     gap: var(--spacing-sm);
+    align-items: flex-start;
+    flex-wrap: wrap;
+}
+
+.form-section-title {
+    font-size: 0.7rem;
+    font-weight: 600;
+    color: var(--accent-primary);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-top: var(--spacing-sm);
+    padding-bottom: var(--spacing-xs);
+    border-bottom: 1px solid var(--border-color);
+}
+
+.advanced-toggle {
+    display: flex;
     align-items: center;
+    gap: var(--spacing-sm);
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    cursor: pointer;
+    padding: var(--spacing-sm) 0;
+    user-select: none;
+    transition: color 0.2s ease;
+}
+
+.advanced-toggle:hover {
+    color: var(--text-primary);
+}
+
+.advanced-toggle .toggle-icon {
+    transition: transform 0.2s ease;
+    font-size: 0.6rem;
+}
+
+.advanced-toggle.open .toggle-icon {
+    transform: rotate(90deg);
+}
+
+.advanced-section {
+    display: none;
+    flex-direction: column;
+    gap: var(--spacing-md);
+    padding: var(--spacing-md);
+    background: var(--bg-tertiary);
+    border-radius: var(--radius-sm);
+    margin-bottom: var(--spacing-sm);
+}
+
+.advanced-section.open {
+    display: flex;
 }
 
 .exchange-arrow {
@@ -828,4 +883,195 @@ body {
     .panel-right {
         display: none;
     }
+}
+
+/* ============================================
+   Exit Strategy Settings
+   ============================================ */
+
+.exit-config-container {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-md);
+}
+
+.exit-status-bar {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-md);
+    padding: var(--spacing-sm) var(--spacing-md);
+    background: var(--bg-tertiary);
+    border-radius: var(--radius-sm);
+}
+
+.exit-state {
+    font-size: 0.7rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    padding: 2px 8px;
+    border-radius: var(--radius-full);
+}
+
+.exit-state.idle {
+    background: rgba(100, 116, 139, 0.2);
+    color: var(--text-muted);
+}
+
+.exit-state.executing {
+    background: rgba(245, 158, 11, 0.2);
+    color: var(--color-warning);
+    animation: pulse 1.5s infinite;
+}
+
+.exit-state.completed {
+    background: rgba(16, 185, 129, 0.2);
+    color: var(--color-success);
+}
+
+.exit-progress {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-sm);
+}
+
+.exit-progress-bar {
+    flex: 1;
+    height: 6px;
+    background: var(--bg-primary);
+    border-radius: 3px;
+    overflow: hidden;
+    position: relative;
+}
+
+.exit-progress-bar::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    height: 100%;
+    width: inherit;
+    background: var(--accent-gradient);
+    transition: width 0.3s ease;
+}
+
+.exit-progress span {
+    font-family: var(--font-mono);
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+}
+
+.config-group {
+    background: var(--bg-tertiary);
+    border-radius: var(--radius-sm);
+    padding: var(--spacing-md);
+}
+
+.config-group-title {
+    font-size: 0.7rem;
+    font-weight: 600;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    margin-bottom: var(--spacing-sm);
+}
+
+.config-row {
+    display: flex;
+    gap: var(--spacing-md);
+    margin-bottom: var(--spacing-sm);
+}
+
+.config-row:last-child {
+    margin-bottom: 0;
+}
+
+.config-field {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.config-field.full-width {
+    flex: 1 1 100%;
+}
+
+.config-field label {
+    font-size: 0.7rem;
+    color: var(--text-secondary);
+}
+
+.config-input {
+    padding: var(--spacing-sm);
+    background: var(--bg-primary);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    color: var(--text-primary);
+    font-family: var(--font-mono);
+    font-size: 0.85rem;
+    width: 100%;
+}
+
+.config-input:focus {
+    outline: none;
+    border-color: var(--accent-primary);
+}
+
+.config-slider {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 100%;
+    height: 6px;
+    background: var(--bg-primary);
+    border-radius: 3px;
+    outline: none;
+    margin-top: 4px;
+}
+
+.config-slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 16px;
+    height: 16px;
+    background: var(--accent-primary);
+    border-radius: 50%;
+    cursor: pointer;
+    box-shadow: 0 2px 6px rgba(59, 130, 246, 0.4);
+    transition: transform 0.2s ease;
+}
+
+.config-slider::-webkit-slider-thumb:hover {
+    transform: scale(1.1);
+}
+
+.config-slider::-moz-range-thumb {
+    width: 16px;
+    height: 16px;
+    background: var(--accent-primary);
+    border-radius: 50%;
+    cursor: pointer;
+    border: none;
+}
+
+.radio-group {
+    display: flex;
+    gap: var(--spacing-md);
+}
+
+.radio-label {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-xs);
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+    cursor: pointer;
+}
+
+.radio-label input[type="radio"] {
+    accent-color: var(--accent-primary);
+}
+
+.btn-apply-exit {
+    margin-top: var(--spacing-sm);
+    width: 100%;
 }

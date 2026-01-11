@@ -10,6 +10,7 @@ from typing import Optional, List, Dict, Callable
 from .config import config
 from .exchanges import LighterAdapter, ExtendedAdapter, ParadexAdapter, VestAdapter, ExchangeAdapter, Orderbook
 from .analysis.orderbook_analyzer import OrderbookAnalyzer, SpreadOpportunity
+from .execution import SmartExecutionManager, EntryConfig
 
 
 @dataclass
@@ -19,12 +20,19 @@ class BotConfig:
     symbol: str
     exchange_a: str
     exchange_b: str
-    min_spread_percent: float = 0.15
-    max_position_size: float = 20.0
-    poll_interval_ms: int = 50  # HFT: faster polling
-    use_websocket: bool = False  # REST by default for inter-exchange sync
+    # Entry parameters (Scale-in)
+    entry_start_pct: float = 0.5        # Start firing threshold (%)
+    entry_full_pct: float = 1.0         # 100% investment threshold (%)
+    target_amount: float = 15.0         # Target in tokens
+    # Advanced parameters
+    max_slippage_pct: float = 0.05      # Strict slippage limit (%)
+    refill_delay_ms: int = 500          # Pause between slices (ms)
+    min_validity_ms: int = 100          # Anti-fakeout duration (ms)
+    # Modes
+    poll_interval_ms: int = 50          # HFT: faster polling
+    use_websocket: bool = False         # REST by default
     dry_run: bool = True
-    fee_bps: float = 5.0  # Trading fees in basis points
+    fee_bps: float = 5.0                # Trading fees in basis points
 
 
 @dataclass
@@ -92,13 +100,28 @@ class SingleBot:
         self.exchange_a: Optional[ExchangeAdapter] = None
         self.exchange_b: Optional[ExchangeAdapter] = None
         self.analyzer = OrderbookAnalyzer(
-            default_trade_size=bot_config.max_position_size,
+            default_trade_size=bot_config.target_amount,
             fee_bps=bot_config.fee_bps
         )
         self.orderbooks = OrderbookState()
         self._logs: List[str] = []
         self._ws_mode = False
         self._update_callback: Optional[Callable] = None
+        
+        # Smart Execution Manager with entry config from bot params
+        entry_config = EntryConfig(
+            entry_start_pct=bot_config.entry_start_pct,
+            entry_full_pct=bot_config.entry_full_pct,
+            target_amount=bot_config.target_amount,
+            max_slippage_pct=bot_config.max_slippage_pct,
+            refill_delay_ms=bot_config.refill_delay_ms,
+            min_validity_ms=bot_config.min_validity_ms,
+        )
+        self.execution_manager = SmartExecutionManager(
+            orderbook_analyzer=self.analyzer,
+            log_callback=self.log
+        )
+        self.entry_config = entry_config
 
     def log(self, message: str):
         """Add to logs"""
@@ -151,6 +174,7 @@ class SingleBot:
                 "a": self.orderbooks.exchange_a.to_dict() if self.orderbooks.exchange_a else None,
                 "b": self.orderbooks.exchange_b.to_dict() if self.orderbooks.exchange_b else None,
             },
+            "exit_status": self.execution_manager.get_status() if self.execution_manager else None,
             "logs": self.get_logs(),
         }
 
@@ -381,8 +405,12 @@ class BotManager:
         symbol: str,
         exchange_a: str,
         exchange_b: str,
-        min_spread: float = 0.15,
-        max_size: float = 20.0,
+        entry_start_pct: float = 0.5,
+        entry_full_pct: float = 1.0,
+        target_amount: float = 15.0,
+        max_slippage_pct: float = 0.05,
+        refill_delay_ms: int = 500,
+        min_validity_ms: int = 100,
         poll_interval: int = 50,
         use_websocket: bool = True,
         dry_run: bool = True,
@@ -400,8 +428,12 @@ class BotManager:
             symbol=symbol,
             exchange_a=exchange_a,
             exchange_b=exchange_b,
-            min_spread_percent=min_spread,
-            max_position_size=max_size,
+            entry_start_pct=entry_start_pct,
+            entry_full_pct=entry_full_pct,
+            target_amount=target_amount,
+            max_slippage_pct=max_slippage_pct,
+            refill_delay_ms=refill_delay_ms,
+            min_validity_ms=min_validity_ms,
             poll_interval_ms=poll_interval,
             use_websocket=use_websocket,
             dry_run=dry_run,

@@ -94,11 +94,30 @@ class CreateBotRequest(BaseModel):
     symbol: str
     exchange_a: str
     exchange_b: str
-    min_spread: float = 0.15
-    max_size: float = 20.0
+    # Entry parameters
+    entry_start_pct: float = 0.5
+    entry_full_pct: float = 1.0
+    target_amount: float = 15.0
+    # Advanced parameters
+    max_slippage_pct: float = 0.05
+    refill_delay_ms: int = 500
+    min_validity_ms: int = 100
+    # Modes
     poll_interval: int = 50
     use_websocket: bool = False
     dry_run: bool = True
+
+
+class ExitConfigRequest(BaseModel):
+    """Request model for updating exit strategy configuration"""
+    grid_start_spread: float | None = None
+    grid_end_spread: float | None = None
+    grid_levels_count: int | None = None
+    grid_distribution: str | None = None
+    twap_interval_sec: float | None = None
+    twap_qty_pct: float | None = None
+    profit_threshold_pct: float | None = None
+    max_slippage_bps: float | None = None
 
 
 @app.on_event("startup")
@@ -182,8 +201,12 @@ async def create_bot(req: CreateBotRequest):
         symbol=req.symbol,
         exchange_a=req.exchange_a,
         exchange_b=req.exchange_b,
-        min_spread=req.min_spread,
-        max_size=req.max_size,
+        entry_start_pct=req.entry_start_pct,
+        entry_full_pct=req.entry_full_pct,
+        target_amount=req.target_amount,
+        max_slippage_pct=req.max_slippage_pct,
+        refill_delay_ms=req.refill_delay_ms,
+        min_validity_ms=req.min_validity_ms,
         poll_interval=req.poll_interval,
         use_websocket=req.use_websocket,
         dry_run=req.dry_run,
@@ -247,6 +270,52 @@ async def remove_bot(bot_id: str):
         })
     
     return result
+
+
+@app.post("/api/bots/{bot_id}/configure_exit")
+async def configure_exit(bot_id: str, req: ExitConfigRequest):
+    """Hot-reload exit strategy configuration for a bot"""
+    if bot_id not in manager.bots:
+        return {"success": False, "error": "Bot not found"}
+    
+    bot = manager.bots[bot_id]
+    
+    # Update only provided fields
+    if bot.execution_manager:
+        config = bot.execution_manager.config
+        
+        if req.grid_start_spread is not None:
+            config.grid_start_spread = req.grid_start_spread
+        if req.grid_end_spread is not None:
+            config.grid_end_spread = req.grid_end_spread
+        if req.grid_levels_count is not None:
+            config.grid_levels_count = req.grid_levels_count
+        if req.grid_distribution is not None:
+            config.grid_distribution = req.grid_distribution
+        if req.twap_interval_sec is not None:
+            config.twap_interval_sec = req.twap_interval_sec
+        if req.twap_qty_pct is not None:
+            config.twap_qty_pct = req.twap_qty_pct
+        if req.profit_threshold_pct is not None:
+            config.profit_threshold_pct = req.profit_threshold_pct
+        if req.max_slippage_bps is not None:
+            config.max_slippage_bps = req.max_slippage_bps
+        
+        # Trigger config update (rebuilds grid if needed)
+        bot.execution_manager.update_config(config)
+        
+        # Broadcast update to all clients
+        await ws_manager.broadcast({
+            "type": "exit_config_updated",
+            "data": {
+                "bot_id": bot_id,
+                "config": config.to_dict()
+            }
+        })
+        
+        return {"success": True, "config": config.to_dict()}
+    
+    return {"success": False, "error": "Execution manager not initialized"}
 
 
 @app.get("/api/exchanges")

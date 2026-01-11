@@ -29,7 +29,7 @@ class BotConfig:
     refill_delay_ms: int = 500          # Pause between slices (ms)
     min_validity_ms: int = 100          # Anti-fakeout duration (ms)
     # Modes
-    poll_interval_ms: int = 50          # HFT: faster polling
+    poll_interval_ms: int = 20          # HFT: faster polling
     dry_run: bool = True
     fee_bps: float = 5.0                # Trading fees in basis points
 
@@ -360,7 +360,7 @@ class BotManager:
         max_slippage_pct: float = 0.05,
         refill_delay_ms: int = 500,
         min_validity_ms: int = 100,
-        poll_interval: int = 50,
+        poll_interval: int = 20,
         dry_run: bool = True,
     ) -> dict:
         """Create and start a new HFT bot"""

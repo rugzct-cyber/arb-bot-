@@ -676,7 +676,7 @@ async function addBot(e) {
         min_validity_ms: parseInt(document.getElementById('min-validity').value),
         // Modes
         dry_run: document.getElementById('dry-run').checked,
-        poll_interval: 50,
+        poll_interval: 20,
     };
 
     try {

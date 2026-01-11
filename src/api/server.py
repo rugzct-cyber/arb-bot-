@@ -103,7 +103,7 @@ class CreateBotRequest(BaseModel):
     refill_delay_ms: int = 500
     min_validity_ms: int = 100
     # Modes
-    poll_interval: int = 50
+    poll_interval: int = 20
     dry_run: bool = True
 
 

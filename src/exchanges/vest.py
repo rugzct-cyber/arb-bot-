@@ -14,6 +14,7 @@ from .base import (
     Orderbook,
     Order,
     Balance,
+    Position,
     PriceLevel,
     LatencyStats,
 )
@@ -167,6 +168,10 @@ class VestAdapter(ExchangeAdapter):
     async def cancel_order(self, order_id: str, symbol: str) -> bool:
         """Cancel order - requires authentication"""
         return False
+
+    async def get_positions(self, symbol: str = None) -> List[Position]:
+        """Get positions - not implemented"""
+        return []
 
     async def close(self) -> None:
         """Close connections"""

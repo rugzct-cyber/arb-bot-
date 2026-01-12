@@ -12,6 +12,7 @@ from .base import (
     Orderbook,
     Order,
     Balance,
+    Position,
     PriceLevel,
     LatencyStats,
 )
@@ -139,6 +140,10 @@ class ParadexAdapter(ExchangeAdapter):
         """Cancel order - requires authentication"""
         # Not implemented
         return False
+
+    async def get_positions(self, symbol: str = None) -> List[Position]:
+        """Get positions - not implemented"""
+        return []
 
     async def close(self) -> None:
         """Close connections"""

@@ -6,8 +6,8 @@ import time
 import asyncio
 import aiohttp
 import json
-from typing import Optional, Callable
-from .base import ExchangeAdapter, Orderbook, Order, Balance, PriceLevel
+from typing import Optional, Callable, List
+from .base import ExchangeAdapter, Orderbook, Order, Balance, Position, PriceLevel
 
 
 class LighterAdapter(ExchangeAdapter):
@@ -172,6 +172,58 @@ class LighterAdapter(ExchangeAdapter):
         except Exception as e:
             print(f"❌ [lighter] Balance error: {e}")
             return None
+
+    async def get_positions(self, symbol: str = None) -> List[Position]:
+        """Fetch open positions from Lighter"""
+        if not self._session or not self.account_index:
+            return []
+
+        try:
+            url = f"{self.BASE_URL}/account?by=index&value={self.account_index}"
+            async with self._session.get(url) as resp:
+                if resp.status != 200:
+                    return []
+
+                data = await resp.json()
+                accounts = data.get("accounts", [])
+                
+                if not accounts:
+                    return []
+
+                account = accounts[0]
+                positions_data = account.get("positions", {})
+                
+                positions = []
+                for market_id_str, pos_data in positions_data.items():
+                    market_id = int(market_id_str)
+                    pos_symbol = self.ID_TO_SYMBOL.get(market_id, f"MARKET_{market_id}")
+                    
+                    # Filter by symbol if specified
+                    if symbol and pos_symbol != symbol:
+                        continue
+                    
+                    size = float(pos_data.get("position", 0))
+                    if size == 0:
+                        continue
+                    
+                    side = "long" if size > 0 else "short"
+                    
+                    positions.append(Position(
+                        exchange=self.name,
+                        symbol=pos_symbol,
+                        side=side,
+                        size=abs(size),
+                        entry_price=float(pos_data.get("avg_entry_price", 0)),
+                        mark_price=float(pos_data.get("mark_price", 0)),
+                        unrealized_pnl=float(pos_data.get("unrealized_pnl", 0)),
+                        liquidation_price=float(pos_data.get("liquidation_price", 0)),
+                    ))
+                
+                return positions
+                
+        except Exception as e:
+            print(f"❌ [lighter] Positions error: {e}")
+            return []
 
     async def place_order(
         self, symbol: str, side: str, size: float, price: float

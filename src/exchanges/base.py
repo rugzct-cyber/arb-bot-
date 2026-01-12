@@ -206,6 +206,24 @@ class Balance:
     available: float
 
 
+@dataclass
+class Position:
+    """Open position on an exchange"""
+    exchange: str
+    symbol: str
+    side: str  # "long" or "short"
+    size: float  # Always positive, side determines direction
+    entry_price: float
+    mark_price: float
+    unrealized_pnl: float
+    liquidation_price: float = 0.0
+    
+    @property
+    def signed_size(self) -> float:
+        """Return size with sign (positive for long, negative for short)"""
+        return self.size if self.side.lower() == "long" else -self.size
+
+
 @dataclass 
 class LatencyStats:
     """Latency tracking for HFT"""
@@ -271,4 +289,9 @@ class ExchangeAdapter(ABC):
     @abstractmethod
     async def cancel_order(self, order_id: str) -> bool:
         """Cancel an order"""
+        pass
+
+    @abstractmethod
+    async def get_positions(self, symbol: str = None) -> List['Position']:
+        """Get open positions, optionally filtered by symbol"""
         pass

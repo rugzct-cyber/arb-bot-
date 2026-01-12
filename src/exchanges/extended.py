@@ -6,8 +6,8 @@ import time
 import asyncio
 import aiohttp
 import json
-from typing import Optional
-from .base import ExchangeAdapter, Orderbook, Order, Balance, PriceLevel
+from typing import Optional, List
+from .base import ExchangeAdapter, Orderbook, Order, Balance, Position, PriceLevel
 
 
 class ExtendedAdapter(ExchangeAdapter):
@@ -218,6 +218,56 @@ class ExtendedAdapter(ExchangeAdapter):
         except Exception as e:
             print(f"❌ [extended] Balance error: {e}")
             return None
+
+    async def get_positions(self, symbol: str = None) -> List[Position]:
+        """Fetch open positions from Extended"""
+        if not self._session or not self.api_key:
+            return []
+
+        try:
+            headers = {"X-API-Key": self.api_key}
+            url = "https://api.starknet.extended.exchange/api/v1/user/positions"
+            
+            # Add market filter if symbol specified
+            if symbol:
+                market_name = self._get_market_name(symbol)
+                url += f"?market={market_name}"
+
+            async with self._session.get(url, headers=headers) as resp:
+                if resp.status != 200:
+                    return []
+
+                data = await resp.json()
+                positions_data = data.get("data", [])
+                
+                positions = []
+                for pos_data in positions_data:
+                    size = float(pos_data.get("size", 0))
+                    if size == 0:
+                        continue
+                    
+                    # Convert market name back to symbol format
+                    market = pos_data.get("market", "")
+                    pos_symbol = market.replace("-", "-") if market else "ETH-USD"
+                    
+                    side = pos_data.get("side", "LONG").lower()
+                    
+                    positions.append(Position(
+                        exchange=self.name,
+                        symbol=pos_symbol,
+                        side=side,
+                        size=abs(size),
+                        entry_price=float(pos_data.get("openPrice", 0)),
+                        mark_price=float(pos_data.get("markPrice", 0)),
+                        unrealized_pnl=float(pos_data.get("unrealisedPnl", 0)),
+                        liquidation_price=float(pos_data.get("liquidationPrice", 0)),
+                    ))
+                
+                return positions
+                
+        except Exception as e:
+            print(f"❌ [extended] Positions error: {e}")
+            return []
 
     async def place_order(
         self, symbol: str, side: str, size: float, price: float
